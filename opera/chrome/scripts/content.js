@@ -51,6 +51,11 @@ EXTENSION.sendRequest({initialized: true}, function(response) {
     }
 
     onReady(function() {
+
+      EXTENSION.sendRequest({action: 'contentStatus'}, function(response) {
+
+      });
+
       const IFRAMES = document.getElementsByTagName('iframe');
       const IFRAME_COUNT = IFRAMES.length;
 

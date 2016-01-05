@@ -17,6 +17,35 @@
 
     Brian Kennish <brian@rocketshipapps.com>
 */
+function whitelistToggle(tab) {
+  const WHITELIST = deserialize(localStorage.whitelist) || {};
+  const HOST = getHost(tab.url);
+  const ID = tab.id;
+
+  if (WHITELIST[HOST]) {
+    delete WHITELIST[HOST];
+    localStorage.whitelist = JSON.stringify(WHITELIST);
+    TABS.reload(ID);
+    return("Blocker On");
+  } else {
+    WHITELIST[HOST] = true;
+    localStorage.whitelist = JSON.stringify(WHITELIST);
+    TABS.reload(ID);
+    return("Blocker Off");
+  }
+}
+
+function whitelistStatus(tab) {
+  const WHITELIST = deserialize(localStorage.whitelist) || {};
+  const HOST = getHost(tab.url);
+
+  if (WHITELIST[HOST]) {
+    return("Blocker Off");
+  } else {
+    return("Blocker On");
+  } 
+}
+
 function deserialize(object) {
   return typeof object == 'string' ? JSON.parse(object) : object;
 }
@@ -119,30 +148,59 @@ chrome.webNavigation.onCommitted.addListener(function(details) {
 chrome.extension.onRequest.addListener(function(request, sender, sendResponse) {
   const TAB = sender.tab;
 
-  if (TAB) {
-    const PARENT_HOST = getHost(TAB.url);
-    const WHITELISTED =
-        (deserialize(localStorage.whitelist) || {})[PARENT_HOST];
+  if(request.action == "whitelistToggle") {
+    chrome.tabs.query({active: true}, function(tabs) {
+      sendResponse({whitelistStatus: whitelistToggle(tabs[0])});
+    });
+  } else if (request.action == "popupLoad") {
 
-    if (request.initialized)
-        sendResponse({parentHost: PARENT_HOST, whitelisted: WHITELISTED});
-    else {
-      request.ads && BROWSER_ACTION.setIcon({
-        tabId: TAB.id,
-        path: {
-          '19':
-              PATH + 'images/' + (WHITELISTED ? 'un' : '') +
-                  'blocked-ads/19.png',
-          '38':
-              PATH + 'images/' + (WHITELISTED ? 'un' : '') +
-                  'blocked-ads/38.png'
-        }
-      });
-      sendResponse({});
+    var debug = CK_API.auth_headers(localStorage.APIKey, localStorage.APISecret, '/v1/account/' + localStorage.CKRefNum);
+
+    var xmlHttp = new XMLHttpRequest();
+    xmlHttp.open('GET', 'https://api.coinkite.com/v1/account/' + localStorage.CKRefNum, true);
+    xmlHttp.setRequestHeader('X-CK-Key', debug['X-CK-Key']);
+    xmlHttp.setRequestHeader('X-CK-Sign', debug['X-CK-Sign']);
+    xmlHttp.setRequestHeader('X-CK-Timestamp', debug['X-CK-Timestamp']);
+
+    xmlHttp.onreadystatechange = function() {
+      if (xmlHttp.readyState == 4 && xmlHttp.status == 200) {
+        chrome.tabs.query({active: true}, function(tabs) {
+          sendResponse({whitelistStatus: whitelistStatus(tabs[0]), bitcoinBalance: JSON.parse(xmlHttp.responseText).account.balance.decimal, bitcoinAddress: JSON.parse(xmlHttp.responseText).account.quick_deposit});
+        });
+      }
     }
-  } else sendResponse({});
+
+    xmlHttp.send();
+  } else if (request.action == "contentStatus"){
+    alert('Message from content recieved!');
+  } else {
+  
+    if (TAB) {
+      const PARENT_HOST = getHost(TAB.url);
+      const WHITELISTED =
+          (deserialize(localStorage.whitelist) || {})[PARENT_HOST];
+  
+      if (request.initialized)
+          sendResponse({parentHost: PARENT_HOST, whitelisted: WHITELISTED});
+      else {
+        request.ads && BROWSER_ACTION.setIcon({
+          tabId: TAB.id,
+          path: {
+            '19':
+                PATH + 'images/' + (WHITELISTED ? 'un' : '') +
+                    'blocked-ads/19.png',
+            '38':
+                PATH + 'images/' + (WHITELISTED ? 'un' : '') +
+                    'blocked-ads/38.png'
+          }
+        });
+        sendResponse({});
+      }
+    } else sendResponse({});
+  }
 });
 
+/*
 BROWSER_ACTION.onClicked.addListener(function(tab) {
   const WHITELIST = deserialize(localStorage.whitelist) || {};
   const HOST = getHost(tab.url);
@@ -158,3 +216,4 @@ BROWSER_ACTION.onClicked.addListener(function(tab) {
     TABS.reload(ID);
   }
 });
+*/
